@@ -222,6 +222,7 @@ if __name__ == "__main__":
     #################################### 
     #The main loop of training
     #################################### 
+    eta = 0.99
     for epoc in range(100):
         iterator = iter(dataloaderTrain)
         with trange(len(dataloaderTrain)) as t:
@@ -262,11 +263,11 @@ if __name__ == "__main__":
                     loss = criterion(pred_v,targetT[tau])
                     loss.backward()
                     optimizer.step()
-                    loss_T += loss.item()
+                    loss_T += loss.item()       
 
                     
                 # store your smoothed loss here
-                lossMovingAveraged += loss/T
+                lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*loss_T/T
                 # this is used to set a description in the tqdm progress bar 
                 t.set_description(f"epoc : {epoc}, loss {lossMovingAveraged}")
                 #save the model
