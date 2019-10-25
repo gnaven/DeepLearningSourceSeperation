@@ -76,9 +76,10 @@ class ModelSingleStep(torch.nn.Module):
         return result 
 
 def validate(model, dataloader):
-    lossMovingAveraged=0
-    criterion = nn.KLDivLoss()
+    lossMovingAveraged= -1
+    #TODO implement KL Divergence function
     model.eval()
+    eta = 0.99
     with torch.no_grad():
     #Each time fetch a batch of samples from the dataloader
         for sample in dataloader:
@@ -86,26 +87,23 @@ def validate(model, dataloader):
             mixture = sample['mixture'].to(device)
             target = sample['vocal'].to(device)
             
-            seqLen = mixture.shape[2]
-            winLen = mixture.shape[1]
-            currentBatchSize = mixture.shape[0] 
             
-            mixtureT = torch.transpose(mixture[0],0,1)
-            targetT = torch.transpose(target[0],0,1)
+            mixtureT = tensorTransform(mixture,5)
+            targetT = tensorTransform(target,5)
             mask = [] 
             loss_T = 0
-            T = mixture.shape[2]            
+            T = len(mixtureT)           
             for tau in range(T):
                 out = model.forward(mixtureT[tau])
                 mask.append(out)
                 
                 pred_v = out*mixtureT[tau]
-                loss = criterion(pred_v,targetT[tau])  
+                loss = KL_loss(pred_v,targetT[tau])  
                 loss_T += loss.item()
                 
-            lossMovingAveraged += loss/T 
+            lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/winLen) 
         
-    validationLoss = lossMovingAveraged/len(dataloader)
+    validationLoss = lossMovingAveraged
             
     ######################################################################################
     # Implement here your validation loop. It should be similar to your train loop
@@ -115,6 +113,28 @@ def validate(model, dataloader):
 
     model.train()
     return validationLoss
+def tensorTransform(Tensor,colStack):
+    """
+    Transposes the Matrix and selects the given
+    number of column.
+    Returns a list of tensors for iteration
+    """
+    TensorT = torch.transpose(Tensor,1,2)
+    i =0
+    TensorTlist = []
+    while i<TensorT.shape[1]:
+        TensorT_col = TensorT[:,i:i+colStack,:]
+        TensorTlist.append(TensorT_col)
+        i+=colStack
+
+    return TensorTlist
+    
+def KL_loss(X,Y):
+    operator = (X*torch.log(X+0.01) - torch.log(Y+0.01)) -X+Y
+    loss = torch.sum(operator)
+    return loss
+    
+    
 
 def saveFigure(result, target, mixture):
     plt.subplot(3,1,1)
@@ -216,8 +236,7 @@ if __name__ == "__main__":
 
     model.train(mode=True)
 
-    criterion = nn.KLDivLoss()
-    lossMovingAveraged  = 0
+    lossMovingAveraged  = -1
 
     #################################### 
     #The main loop of training
@@ -249,10 +268,13 @@ if __name__ == "__main__":
                 # Fill the rest of the code here#
                                 #################################
                 # iterating through each T (column) in STFT of audio file
-                T = mixture.shape[2]
+        
                 #transposing the tensors to get columns
-                mixtureT = torch.transpose(mixture[0],0,1)
-                targetT = torch.transpose(target[0],0,1)
+                window = 5
+                mixtureT = tensorTransform(mixture,window)
+                targetT = tensorTransform(target,window)
+                
+                T = len(mixtureT)
                 mask = [] 
                 loss_T = 0
                 for tau in range(T):
@@ -260,14 +282,13 @@ if __name__ == "__main__":
                     mask.append(out)
                     
                     pred_v = out*mixtureT[tau]
-                    loss = criterion(pred_v,targetT[tau])
+                    loss = KL_loss(pred_v,targetT[tau])
                     loss.backward()
                     optimizer.step()
                     loss_T += loss.item()       
-
                     
                 # store your smoothed loss here
-                lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*loss_T/T
+                lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/winLen)
                 # this is used to set a description in the tqdm progress bar 
                 t.set_description(f"epoc : {epoc}, loss {lossMovingAveraged}")
                 #save the model
