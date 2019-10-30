@@ -130,7 +130,7 @@ def tensorTransform(Tensor,colStack):
     return TensorTlist
     
 def KL_loss(X,Y):
-    operator = (X*torch.log(X+0.01) - torch.log(Y+0.01)) -X+Y
+    operator = torch.mean((X*torch.log(X+0.01) - torch.log(Y+0.01)) -X+Y)
     loss = torch.sum(operator)
     return loss
     
