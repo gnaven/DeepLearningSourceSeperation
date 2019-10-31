@@ -42,14 +42,20 @@ class ModelSingleStep(torch.nn.Module):
             if len(param.shape)>1:
                 torch.nn.init.xavier_normal_(param)
 
-    def temporal(self,x,hidden):
+    def temporal(self,x,hiddenTuple):
         
-        x1,hidden = self.lstm(x,hidden)
+        h_list = []
+        for frame_num in range(x.shape[1]):
+            h_0,c_0 = self.lstm(x[:,frame_num,:],hiddenTuple)
+            hiddenTuple = (h_0,c_0)
+            h_list.append(h_0.unsqueeze(1))
+        
+        x1 = torch.cat(h_list,dim=1)
         x2 = x
         
-        t = torch.cat((x1,x2),dim=1)
+        t = torch.cat((x1,x2),dim=2)
         
-        return t,hidden
+        return t,hiddenTuple
     def fuse(self, f):
         
         f = F.leaky_relu(self.fusefc1(f))
@@ -100,6 +106,8 @@ def validate(model, dataloader):
     lossMovingAveraged= -1
     model.eval()
     eta = 0.99
+    
+    window = 15
     with torch.no_grad():
     #Each time fetch a batch of samples from the dataloader
         for sample in dataloader:
@@ -108,8 +116,8 @@ def validate(model, dataloader):
             target = sample['vocal'].to(device)
             
             
-            mixtureT = tensorTransform(mixture,5)
-            targetT = tensorTransform(target,5)
+            mixtureT = tensorTransform(mixture,window)
+            targetT = tensorTransform(target,window)
             mask = [] 
             loss_T = 0
             T = len(mixtureT)
@@ -117,17 +125,15 @@ def validate(model, dataloader):
             hidden = None
             for tau in range(T):
                 out,hidden = model.forward(mixtureT[tau],hidden)
-                hidden = hidden.data
-                mask.append(out)
                 
                 pred_v = out*mixtureT[tau]
                 loss = KL_loss(pred_v,targetT[tau])  
                 loss_T += loss.item()
                 
             if lossMovingAveraged<0:
-                lossMovingAveraged = loss_T/winLen
+                lossMovingAveraged = loss_T/(window*T)
             else:
-                lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/winLen) 
+                lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/(window*T)) 
         
     validationLoss = lossMovingAveraged
             
@@ -155,13 +161,11 @@ def tensorTransform(Tensor,colStack):
 
     return TensorTlist
     
-def KL_loss(Y,X):
-    operator = torch.mean((X*torch.log(X+0.01) - torch.log(Y+0.01)) -X+Y)
-    loss = torch.sum(operator)
-    
-    
+
+def KL_loss(out,target):
+    loss = torch.sum(torch.mean(target*(torch.log(target+1e-4) - torch.log(out+ 1e-4)) -target+out,dim=1))
+
     return loss
-    
     
 
 def saveFigure(result, target, mixture):
@@ -243,7 +247,7 @@ if __name__ == "__main__":
 
     #initialize the data loader
     #num_workers means how many workers are used to prefetch the data, reduce num_workers if OOM error
-    dataloaderTrain = torch.utils.data.DataLoader(datasetTrain, batch_size = batchSize, shuffle=False, num_workers = 4, collate_fn = Data.collate_fn)
+    dataloaderTrain = torch.utils.data.DataLoader(datasetTrain, batch_size = batchSize, shuffle=False, num_workers = 2, collate_fn = Data.collate_fn)
     dataloaderValid = torch.utils.data.DataLoader(datasetValid, batch_size = 10, shuffle=False, num_workers = 0, collate_fn = Data.collate_fn)
 
     #initialize the Model
@@ -311,32 +315,32 @@ if __name__ == "__main__":
                 # iterating through each T (column) in STFT of audio file
         
                 #transposing the tensors to get columns
-                window = 5
+                window = 15
                 mixtureT = tensorTransform(mixture,window)
                 targetT = tensorTransform(target,window)
                 
                 T = len(mixtureT)
-                mask = [] 
                 loss_T = 0
                 hidden = None
                 for tau in range(T):
                     model.zero_grad()
                     
                     out,hidden = model.forward(mixtureT[tau],hidden)
-                    hidden = hidden.data                    
-                    mask.append(out)
                     
                     pred_v = out*mixtureT[tau]
                     loss = KL_loss(pred_v,targetT[tau])
                     loss.backward()
                     optimizer.step()
-                    loss_T += loss.item()       
+                    loss_T += loss.item()
+                    
+                    hidden = (hidden[0].detach(),hidden[1].detach())
+                    
                     
                 # store your smoothed loss here
                 if lossMovingAveraged <0:
-                    lossMovingAveraged = loss_T/winLen
+                    lossMovingAveraged = loss_T/seqLen
                 else:
-                    lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/winLen)
+                    lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/seqLen)
                 # this is used to set a description in the tqdm progress bar 
                 t.set_description(f"epoc : {epoc}, loss {lossMovingAveraged}")
                 #save the model
@@ -354,7 +358,7 @@ if __name__ == "__main__":
 
         #### Calculate validation loss
         valLoss = validate(model, dataloaderValid)
-        print(f"validation Loss = {valLoss:.4f}")
+        print(f"validation Loss = {valLoss:.20f}")
         
         if valLoss < minValLoss:
             minValLoss = valLoss
@@ -363,6 +367,6 @@ if __name__ == "__main__":
                 'state_dict': model.state_dict(),
                 'minValLoss': minValLoss,
             }
-            torch.save(checkpoint, 'savedModel_feedForward_best.pt')
+            torch.save(checkpoint, 'savedModel_lstm_best.pt')
 
 
