@@ -27,7 +27,7 @@ class ModelSingleStep(torch.nn.Module):
 
         self.fc3 = nn.Linear(400,1000)
         self.fc4 = nn.Linear(1000,2049)
-        
+
         ###################################
 
         self.initParams()
@@ -77,34 +77,35 @@ class ModelSingleStep(torch.nn.Module):
 
 def validate(model, dataloader):
     lossMovingAveraged= -1
-    #TODO implement KL Divergence function
     model.eval()
     eta = 0.99
+    window = 20
     with torch.no_grad():
     #Each time fetch a batch of samples from the dataloader
         for sample in dataloader:
-            
+
             mixture = sample['mixture'].to(device)
             target = sample['vocal'].to(device)
-            
-            
-            mixtureT = tensorTransform(mixture,5)
-            targetT = tensorTransform(target,5)
-            mask = [] 
+
+
+            mixtureT = tensorTransform(mixture,window)
+            targetT = tensorTransform(target,window)
             loss_T = 0
             T = len(mixtureT)           
             for tau in range(T):
                 out = model.forward(mixtureT[tau])
-                mask.append(out)
-                
+
                 pred_v = out*mixtureT[tau]
                 loss = KL_loss(pred_v,targetT[tau])  
                 loss_T += loss.item()
-                
-            lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/winLen) 
-        
-    validationLoss = lossMovingAveraged
             
+            #if lossMovingAveraged<0:
+                #lossMovingAveraged = loss_T/(window*T) 
+            #else:
+                #lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/(window*T)) 
+
+    validationLoss = loss_T/(window*T) 
+
     ######################################################################################
     # Implement here your validation loop. It should be similar to your train loop
     # without the backpropagation steps
@@ -128,13 +129,13 @@ def tensorTransform(Tensor,colStack):
         i+=colStack
 
     return TensorTlist
-    
-def KL_loss(X,Y):
-    operator = torch.mean((X*torch.log(X+0.01) - torch.log(Y+0.01)) -X+Y)
-    loss = torch.sum(operator)
+
+def KL_loss(out,target):
+    loss = torch.sum(torch.mean(target*(torch.log(target+1e-4) - torch.log(out+ 1e-4)) -target+out,dim=1))
+
     return loss
-    
-    
+
+
 
 def saveFigure(result, target, mixture):
     plt.subplot(3,1,1)
@@ -162,7 +163,7 @@ if __name__ == "__main__":
     # how many audio files to process fetched at each time, modify it if OOM error
     parser.add_argument('--batchSize', type=int, default = 8)
     # set the learning rate, default value is 0.0001
-    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--lr', type=float, default=0.1)
     # Path to the dataset, modify it accordingly
     parser.add_argument('--dataset', type=str, default = '../DSD100')
     # set --load to 1, if you want to restore weights from a previous trained model
@@ -227,6 +228,7 @@ if __name__ == "__main__":
         minValLoss = checkpoint['minValLoss']
         model.load_state_dict(checkpoint['state_dict'])
 
+
     #determine if cuda is available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -250,8 +252,6 @@ if __name__ == "__main__":
                 sample = next(iterator)
                 #the progress of training in the current epoch
 
-                #Remember to clear the accumulated gradient each time you perfrom optimizer.step()
-                model.zero_grad()
 
                 #read the input and the fitting target into the device
                 mixture = sample['mixture'].to(device)
@@ -265,30 +265,43 @@ if __name__ == "__main__":
                 result = torch.zeros((winLen, seqLen), dtype=torch.float32)
 
                                 #################################
-                # Fill the rest of the code here#
                                 #################################
+                # taking smaller steps as we go deeper into training 
+                if epoc == 40:
+                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/10)
+                elif epoc ==60:
+                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/100)
+                elif epoc == 70:
+                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/1000)
+
+
                 # iterating through each T (column) in STFT of audio file
-        
+
                 #transposing the tensors to get columns
-                window = 5
+                window = 20
                 mixtureT = tensorTransform(mixture,window)
                 targetT = tensorTransform(target,window)
-                
+
                 T = len(mixtureT)
                 mask = [] 
                 loss_T = 0
                 for tau in range(T):
+                    model.zero_grad()
+
                     out = model.forward(mixtureT[tau])
-                    mask.append(out)
                     
+
                     pred_v = out*mixtureT[tau]
                     loss = KL_loss(pred_v,targetT[tau])
                     loss.backward()
                     optimizer.step()
                     loss_T += loss.item()       
-                    
+
                 # store your smoothed loss here
-                lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/winLen)
+                if lossMovingAveraged <0:
+                    lossMovingAveraged = loss_T/seqLen
+                else:
+                    lossMovingAveraged = eta * lossMovingAveraged+ (1-eta)*(loss_T/seqLen)
                 # this is used to set a description in the tqdm progress bar 
                 t.set_description(f"epoc : {epoc}, loss {lossMovingAveraged}")
                 #save the model
@@ -307,7 +320,7 @@ if __name__ == "__main__":
         #### Calculate validation loss
         valLoss = validate(model, dataloaderValid)
         print(f"validation Loss = {valLoss:.4f}")
-        
+
         if valLoss < minValLoss:
             minValLoss = valLoss
             # then save checkpoint
