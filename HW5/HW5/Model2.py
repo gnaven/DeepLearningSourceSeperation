@@ -45,6 +45,8 @@ class ModelSingleStep(torch.nn.Module):
     def temporal(self,x,hiddenTuple):
         
         h_list = []
+        if x.dim()<3:
+            x = x.unsqueeze(0)          
         for frame_num in range(x.shape[1]):
             h_0,c_0 = self.lstm(x[:,frame_num,:],hiddenTuple)
             hiddenTuple = (h_0,c_0)
@@ -85,10 +87,10 @@ class ModelSingleStep(torch.nn.Module):
         ###################################
         return o
 
-    def forward(self, x,hidden):
+    def forward(self, x,hidden=None):
         #glue the encoder, temporal, fuse and the decoder together
         h = self.encode(x)
-        t,hidden = self.temporal(h.squeeze(0),hidden)
+        t,hidden = self.temporal(h,hidden)
         f = self.fuse(t)
         o = self.decode(f)
         return o,hidden
@@ -194,7 +196,7 @@ if __name__ == "__main__":
     # how many audio files to process fetched at each time, modify it if OOM error
     parser.add_argument('--batchSize', type=int, default = 8)
     # set the learning rate, default value is 0.0001
-    parser.add_argument('--lr', type=float, default=0.1)
+    parser.add_argument('--lr', type=float, default=1e-4)
     # Path to the dataset, modify it accordingly
     parser.add_argument('--dataset', type=str, default = '../DSD100')
     # set --load to 1, if you want to restore weights from a previous trained model

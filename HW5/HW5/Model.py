@@ -76,9 +76,8 @@ class ModelSingleStep(torch.nn.Module):
         return result 
 
 def validate(model, dataloader):
-    lossMovingAveraged= -1
     model.eval()
-    eta = 0.99
+
     window = 20
     with torch.no_grad():
     #Each time fetch a batch of samples from the dataloader
@@ -216,7 +215,7 @@ if __name__ == "__main__":
 
     #initialize the data loader
     #num_workers means how many workers are used to prefetch the data, reduce num_workers if OOM error
-    dataloaderTrain = torch.utils.data.DataLoader(datasetTrain, batch_size = batchSize, shuffle=True, num_workers = 4, collate_fn = Data.collate_fn)
+    dataloaderTrain = torch.utils.data.DataLoader(datasetTrain, batch_size = batchSize, shuffle=True, num_workers = 2, collate_fn = Data.collate_fn)
     dataloaderValid = torch.utils.data.DataLoader(datasetValid, batch_size = 10, shuffle=False, num_workers = 0, collate_fn = Data.collate_fn)
 
     #initialize the Model
@@ -267,12 +266,12 @@ if __name__ == "__main__":
                                 #################################
                                 #################################
                 # taking smaller steps as we go deeper into training 
-                if epoc == 50:
-                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/5)
-                elif epoc ==70:
-                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/10)
-                elif epoc == 90:
-                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/20)
+                #if epoc == 50:
+                    #optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/5)
+                #elif epoc ==70:
+                    #optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/10)
+                #elif epoc == 90:
+                    #optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/20)
 
 
                 # iterating through each T (column) in STFT of audio file
