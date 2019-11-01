@@ -84,12 +84,12 @@ def validate(model, dataloader):
     #Each time fetch a batch of samples from the dataloader
         for sample in dataloader:
 
-            mixture = sample['mixture'].to(device)
-            target = sample['vocal'].to(device)
+            mixturex = sample['mixture'].to(device)
+            targetx = sample['vocal'].to(device)
 
 
-            mixtureT = tensorTransform(mixture,window)
-            targetT = tensorTransform(target,window)
+            mixtureT = tensorTransform(mixturex,window)
+            targetT = tensorTransform(targetx,window)
             loss_T = 0
             T = len(mixtureT)           
             for tau in range(T):
