@@ -163,7 +163,7 @@ if __name__ == "__main__":
     # how many audio files to process fetched at each time, modify it if OOM error
     parser.add_argument('--batchSize', type=int, default = 8)
     # set the learning rate, default value is 0.0001
-    parser.add_argument('--lr', type=float, default=0.1)
+    parser.add_argument('--lr', type=float, default=1e-4)
     # Path to the dataset, modify it accordingly
     parser.add_argument('--dataset', type=str, default = '../DSD100')
     # set --load to 1, if you want to restore weights from a previous trained model
@@ -267,12 +267,12 @@ if __name__ == "__main__":
                                 #################################
                                 #################################
                 # taking smaller steps as we go deeper into training 
-                if epoc == 40:
+                if epoc == 50:
+                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/5)
+                elif epoc ==70:
                     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/10)
-                elif epoc ==60:
-                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/100)
-                elif epoc == 70:
-                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/1000)
+                elif epoc == 90:
+                    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr/20)
 
 
                 # iterating through each T (column) in STFT of audio file
