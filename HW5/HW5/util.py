@@ -43,7 +43,7 @@ if __name__ == "__main__":
     #examples:
 
     #read a wav file
-    x, fs = wavread('piano.wav')
+    x, fs = wavread('mixture.wav')
     #downmix to single channel
     x = np.mean(x, axis= -1)
     #stft

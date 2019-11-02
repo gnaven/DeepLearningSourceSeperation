@@ -50,41 +50,16 @@ if __name__=="__main__":
 
     #switch to eval mode
     model.eval()
-    with torch.no_grad():
-        ###################################
-        #Run your Model here to obtain a mask
-        ###################################
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        
-        ex = []
-        mixture = torch.from_numpy(S.real).to(device)
-        mixedTlist = tensorTransform(mixture, 5)
-        
-        T = len(mixedTlist)
-        mask = [] 
-        loss_T = 0
-        predTensor = []
-        model = model.float()
-        for tau in range(T):
-            out = model.forward(mixedTlist[tau].float())
-            mask.append(out)
-            
-            pred_v = out*mixedTlist[tau].float()
-            predTensor.append(pred_v)
-            #loss = KL_loss(pred_v,targetT[tau])
-       
-        combineTensor = torch.cat(predTensor)
-        magnitude_masked = combineTensor.transpose(0,1)
-        
-        magnitude_masked = magnitude_masked.numpy()
-
-    ###################################
+    
+    magnitude_masked = model.process(magnitude)
+        ####################################
+        ##Run your Model here to obtain a mask
+        ####################################
 
 
     #perform reconstruction
     y = util.istft_real(magnitude_masked * np.exp(1j * angle), blockSize=blockSize, hopSize=hopSize)
 
     #save the result
-    util.wavwrite(sys.argv[2], y,fs)
+    util.wavwrite(sys.argv[2], y.T,fs)
 
